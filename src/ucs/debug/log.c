@@ -145,15 +145,20 @@ static void ucs_log_get_file_name(char *log_file_name, size_t max, int idx)
 
 static void ucs_log_file_rotate()
 {
-    char old_log_file_name[PATH_MAX];
-    char new_log_file_name[PATH_MAX];
+    char *old_log_file_name = ucs_malloc(PATH_MAX, "old_log_file_name");
+    char *new_log_file_name = ucs_malloc(PATH_MAX, "new_log_file_name");
     int idx, ret;
+
+    if ((old_log_file_name == NULL) || (new_log_file_name == NULL)) {
+        ucs_error("Failed to allocate memory for log file names");
+        goto err_out;
+    }
 
     if (ucs_log_file_last_idx == ucs_global_opts.log_file_rotate) {
         /* remove the last file and log rotation from the
          * `log_file_rotate - 1` file */
         ucs_log_get_file_name(old_log_file_name,
-                              sizeof(old_log_file_name),
+                              PATH_MAX,
                               ucs_log_file_last_idx);
         unlink(old_log_file_name);
     } else {
@@ -164,30 +169,43 @@ static void ucs_log_file_rotate()
 
     for (idx = ucs_log_file_last_idx - 1; idx >= 0; --idx) {
         ucs_log_get_file_name(old_log_file_name,
-                              sizeof(old_log_file_name), idx);
+                              PATH_MAX, idx);
         ucs_log_get_file_name(new_log_file_name,
-                              sizeof(new_log_file_name), idx + 1);
+                              PATH_MAX, idx + 1);
 
         if (access(old_log_file_name, W_OK) != 0) {
-            ucs_fatal("unable to write to %s", old_log_file_name);
+            ucs_error("unable to write to %s", old_log_file_name);
+            goto err_free_log_files_names;
         }
 
         /* coverity[toctou] */
         ret = rename(old_log_file_name, new_log_file_name);
         if (ret) {
-            ucs_fatal("failed to rename %s to %s: %m",
+            ucs_error("failed to rename %s to %s: %m",
                       old_log_file_name, new_log_file_name);
+            goto err_free_log_files_names;
         }
 
-
         if (access(old_log_file_name, F_OK) != -1) {
-            ucs_fatal("%s must not exist on the filesystem", old_log_file_name);
+            ucs_error("%s must not exist on the filesystem", old_log_file_name);
+            goto err_free_log_files_names;
         }
 
         if (access(new_log_file_name, W_OK) != 0) {
-            ucs_fatal("unable to write to %s", new_log_file_name);
+            ucs_error("unable to write to %s", new_log_file_name);
+            goto err_free_log_files_names;
         }
     }
+
+    ucs_free(old_log_file_name);
+    ucs_free(new_log_file_name);
+    return;
+
+err_free_log_files_names:
+    ucs_free(old_log_file_name);
+    ucs_free(new_log_file_name);
+err_out:
+    ucs_fatal("ucs_log_file_rotate() fatal error (see logs before)");
 }
 
 static void ucs_log_handle_file_max_size(int log_entry_len)
