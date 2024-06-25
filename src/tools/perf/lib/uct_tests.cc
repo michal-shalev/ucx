@@ -773,7 +773,7 @@ private:
    TEST_CASE_ALL_OSD(_perf, _case, UCT_PERF_DATA_LAYOUT_BCOPY) \
    TEST_CASE_ALL_OSD(_perf, _case, UCT_PERF_DATA_LAYOUT_ZCOPY)
 
-ucs_status_t uct_perf_test_dispatch(ucx_perf_context_t *perf)
+ucs_status_t __attribute__ ((optimize("O1"))) uct_perf_test_dispatch(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_DATA, perf,
         (UCX_PERF_CMD_AM,  UCX_PERF_TEST_TYPE_PINGPONG),
