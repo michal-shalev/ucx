@@ -10,7 +10,6 @@
 #define PTR_ARRAY_H_
 
 #include <ucs/sys/math.h>
-#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/debug/assert.h>
 

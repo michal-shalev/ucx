@@ -12,6 +12,7 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack_int.h>
 
 
 ucs_status_t ucs_lru_create(size_t capacity, ucs_lru_h *lru_p)

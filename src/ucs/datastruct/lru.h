@@ -14,7 +14,6 @@
 #include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/assert.h>
-#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/status.h>
 
 /* LRU element data structure */

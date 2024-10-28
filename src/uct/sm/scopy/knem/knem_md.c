@@ -17,6 +17,7 @@
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <ucs/debug/memtrack_int.h>
 
 
 #define UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(_params) \

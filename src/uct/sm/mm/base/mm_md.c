@@ -12,6 +12,7 @@
 #include "mm_md.h"
 
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack_int.h>
 #include <inttypes.h>
 #include <limits.h>
 

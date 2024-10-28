@@ -9,7 +9,6 @@
 #define UCT_CMA_MD_H_
 
 #include <ucs/config/types.h>
-#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/status.h>
 #include <uct/base/uct_md.h>
 #include <uct/api/v2/uct_v2.h>

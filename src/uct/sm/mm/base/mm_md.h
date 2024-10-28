@@ -11,7 +11,6 @@
 #include <uct/base/uct_md.h>
 #include <uct/sm/base/sm_md.h>
 #include <ucs/config/types.h>
-#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/status.h>
 
 
