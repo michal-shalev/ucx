@@ -8,7 +8,6 @@
 #define UCS_ASYNC_SIGNAL_H
 
 
-#include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/sys.h> /* for ucs_get_tid() */
 #include <pthread.h>

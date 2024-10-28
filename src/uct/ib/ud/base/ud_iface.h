@@ -15,7 +15,6 @@
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/sglib.h>
-#include <ucs/datastruct/list.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/async/async.h>
 #include <ucs/time/timer_wheel.h>

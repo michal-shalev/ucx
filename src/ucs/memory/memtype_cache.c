@@ -13,6 +13,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/list.h>
 #include <ucs/debug/log.h>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack_int.h>

@@ -9,7 +9,6 @@
 #define UCM_UTIL_REPLACE_H_
 
 #include <ucm/bistro/bistro.h>
-#include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
 #include <pthread.h>
 

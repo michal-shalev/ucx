@@ -10,7 +10,6 @@
 #include "ugni_udt_ep.h"
 #include <uct/ugni/base/ugni_types.h>
 #include <uct/ugni/base/ugni_iface.h>
-#include <ucs/datastruct/list.h>
 #include <uct/base/uct_md.h>
 #include <ucs/async/async.h>
 #include <ucs/async/pipe.h>
