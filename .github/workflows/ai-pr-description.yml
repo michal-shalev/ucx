@@ -1,0 +1,60 @@
+name: AI-generated Auto-fill PR Description
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  generate-pr-description:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          pip install openai PyGithub
+
+      - name: Generate PR description
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          import os
+          import openai
+          from github import Github
+
+          # Set up OpenAI API
+          openai.api_key = os.environ['OPENAI_API_KEY']
+
+          # Read the PR template
+          with open('ucx/.github/PULL_REQUEST_TEMPLATE.md', 'r') as file:
+              pr_template = file.read()
+
+          # Get the git diff
+          diff = os.popen('git diff origin/${{ github.base_ref }} origin/${{ github.head_ref }}').read()
+
+          # Generate AI description
+          response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+              {"role": "system", "content": "You are an AI assistant that generates pull request descriptions for the UCX (Unified Communication X) repository. UCX is a communication framework for high-performance and data-centric applications."},
+              {"role": "user", "content": f"Based on this git diff from the UCX repository, generate a pull request description following this template:\n\n{pr_template}\n\nHere's the git diff:\n\n{diff}"}
+            ]
+          )
+
+          ai_description = response.choices[0].message['content']
+
+          # Update PR description
+          g = Github(os.environ['GITHUB_TOKEN'])
+          repo = g.get_repo(os.environ['GITHUB_REPOSITORY'])
+          pr = repo.get_pull(int(os.environ['GITHUB_EVENT_NUMBER']))
+          pr.edit(body=ai_description)
+        shell: python
