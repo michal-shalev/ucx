@@ -204,6 +204,7 @@ static int ucp_flush_check_completion(ucp_request_t *req)
         return 0;
     }
 
+    ucp_ep_mark_flushed(req->send.ep);
     ucp_trace_req(req, "flush ep %p completed", req->send.ep);
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, req,
                                  ucp_ep_flush_slow_path_remove_filter, req);
