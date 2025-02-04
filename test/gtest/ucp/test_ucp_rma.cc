@@ -485,3 +485,117 @@ UCS_TEST_P(test_ucp_rma_order, put_ordering) {
 // TODO: Strong fence hangs with SW RMA emulation, because it requires progress
 // on both peers. Add other tls, when fence implementation revised
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_order, shm_rc_dc, "self,shm,rc,dc")
+
+class test_ucp_unflushed_lanes : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_RMA);
+    }
+
+    virtual void init() {
+        test_ucp_memheap::init();
+    }
+
+    void print_binary(uint64_t value) {
+        for (int bit = 0; bit < 64; ++bit) {
+            printf("%c", (value & (1ULL << bit)) ? '1' : '0');
+        }
+        printf("\n");
+    }
+
+    // Check that the chosen lane is set in unflushed_lanes in:
+    // 1. ucp_put_send_short
+    // 2. ucp_proto_put_offload_short_progress
+    // 3. ucp_proto_put_offload_bcopy_progress
+    // 4. ucp_proto_put_offload_zcopy_progress
+    void put_nbx(void *sbuf, size_t size, uint64_t target, ucp_rkey_h rkey,
+                 uint32_t flags) {
+        ucp_request_param_t param = { .op_attr_mask = flags };
+
+        // printf("unflushed_lanes before put_nbx: ");
+        // print_binary(sender().ep()->ext->flush_state.unflushed_lanes);
+
+        ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), sbuf, size, target,
+                                            rkey, &param);
+        ASSERT_NE(sender().ep()->ext->flush_state.unflushed_lanes, 0);
+
+        // printf("unflushed_lanes after put_nbx:  ");
+        // print_binary(sender().ep()->ext->flush_state.unflushed_lanes);
+
+        request_release(sptr);
+    }
+
+    // Check that unflushed_lanes is not zero in:
+    // 1. ucp_proto_get_offload_zcopy_progress
+    // 2. ucp_proto_get_offload_bcopy_progress
+    // 3.
+    // 4.
+    void get_nbx(void *sbuf, size_t size, uint64_t target, ucp_rkey_h rkey,
+                 uint32_t flags) {
+        ucp_request_param_t param = { .op_attr_mask = flags };
+
+        ucs_status_ptr_t sptr = ucp_get_nbx(sender().ep(), sbuf, size, target,
+                                            rkey, &param);
+        ASSERT_NE(sender().ep()->ext->flush_state.unflushed_lanes, 0);
+        request_release(sptr);
+    }
+
+    // Check that unflushed_lanes is not zero in:
+    // 1. ucp_proto_amo_progress
+    // 2. ucp_proto_amo_sw_progress
+    void atomic_op_nbx(void *sbuf, size_t size, uint64_t target, ucp_rkey_h rkey,
+                       uint32_t flags) {
+        ucp_request_param_t param = { .op_attr_mask = flags };
+
+        ucs_status_ptr_t sptr = ucp_atomic_op_nbx(sender().ep(), UCP_ATOMIC_OP_ADD,
+                                                  sbuf, size, target, rkey, &param);
+        ASSERT_NE(sender().ep()->ext->flush_state.unflushed_lanes, 0);
+        request_release(sptr);
+    }
+
+    void test_unflushed_lanes(size_t size, uint32_t put_flags) {
+        mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer rbuf(size, receiver());
+
+        rbuf.memset(0);
+        sbuf.memset(CHAR_MAX);
+
+        ucs::handle<ucp_rkey_h> rkey;
+        rbuf.rkey(sender(), rkey);
+
+
+
+        for (uint8_t iter = 0; iter < 50; ++iter) {
+            put_nbx(sbuf.ptr(), sbuf.size(), (uint64_t)rbuf.ptr(), rkey,
+                    put_flags);
+            ucp_ep_mark_flushed(sender().ep());
+            sender().fence();
+        }
+
+        // for (uint8_t iter = 0; iter < 50; ++iter) {
+        //     put_nbx(sbuf.ptr(), sbuf.size(), (uint64_t)rbuf.ptr(), rkey,
+        //             put_flags);
+        //     sender().fence();
+        //     // ASSERT_EQ(sender().ep()->ext->flush_state.unflushed_lanes, 0);
+        //     get_nbx(&iter, sizeof(iter), (uint64_t)last, rkey, put_flags);
+        // }
+
+        // for (uint8_t iter = 0; iter < 50; ++iter) {
+        //     put_nbx(sbuf.ptr(), sbuf.size(), (uint64_t)rbuf.ptr(), rkey,
+        //             put_flags);
+        //     sender().fence();
+        //     // ASSERT_EQ(sender().ep()->ext->flush_state.unflushed_lanes, 0);
+        //     atomic_op_nbx(&iter, sizeof(iter), (uint64_t)last, rkey, put_flags);
+        // }
+    }
+};
+
+UCS_TEST_P(test_ucp_unflushed_lanes, unflushed_lanes) {
+    for (size_t size = 1000000; size >= 1; size /= 10) {
+        test_unflushed_lanes(size, 0);
+        // test_unflushed_lanes(size, UCP_OP_ATTR_FLAG_FAST_CMPL);
+        // test_unflushed_lanes(size, UCP_OP_ATTR_FLAG_MULTI_SEND);
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_unflushed_lanes, all, "all")

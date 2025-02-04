@@ -151,6 +151,7 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
     const ucp_proto_multi_priv_t *mpriv;
     uct_iov_t iov;
 
+    printf("ucp_proto_get_offload_zcopy_progress checked!!!\n");
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
                                lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
