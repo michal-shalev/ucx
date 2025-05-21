@@ -686,7 +686,7 @@ static uint64_t ucp_address_flags_from_iface_flags(uint64_t iface_cap_flags,
     }
 
     if (iface_cap_flags & (UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_PUT_BCOPY |
-                           UCT_IFACE_FLAG_PUT_ZCOPY)) {
+                           UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_PUT_BATCH)) {
         iface_flags |= UCP_ADDR_IFACE_FLAG_PUT;
     }
 

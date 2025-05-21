@@ -895,7 +895,8 @@ static uint64_t ucp_worker_get_exclude_caps(ucp_worker_h worker)
     if (!(features & UCT_IFACE_FEATURE_PUT)) {
         exclude_caps |= UCT_IFACE_FLAG_PUT_SHORT |
                         UCT_IFACE_FLAG_PUT_BCOPY |
-                        UCT_IFACE_FLAG_PUT_ZCOPY;
+                        UCT_IFACE_FLAG_PUT_ZCOPY |
+                        UCT_IFACE_FLAG_PUT_BATCH;
     }
 
     if (!(features & UCT_IFACE_FEATURE_GET)) {
@@ -2471,6 +2472,25 @@ static void ucp_worker_usage_tracker_destroy(ucp_worker_h worker)
     ucs_usage_tracker_destroy(worker->usage_tracker.handle);
 }
 
+static ucs_status_t ucp_rma_batch_am_handler(void *arg,
+                                             const void *header, size_t header_length,
+                                             void *data, size_t length,
+                                             const ucp_am_recv_param_t *am_param)
+{
+    ucp_worker_h worker = (ucp_worker_h)arg;
+    ucp_rma_batch_recv_param_t batch_param = {0};
+
+    if (worker->rma_batch_callback != NULL) {
+        return worker->rma_batch_callback(
+            worker->rma_batch_callback_arg,
+            data,
+            length,
+            &batch_param);
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
@@ -2479,6 +2499,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     unsigned name_length;
     ucp_worker_h worker;
     ucs_status_t status;
+    ucp_am_handler_param_t am_handler;
 
     worker = ucs_calloc(1, sizeof(*worker), "ucp worker");
     if (worker == NULL) {
@@ -2618,6 +2639,25 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     } else {
         UCS_CPU_ZERO(&worker->cpu_mask);
     }
+
+    if (params->field_mask & UCP_WORKER_PARAM_FIELD_RMA_BATCH_CB) {
+        worker->rma_batch_callback = params->rma_batch_callback;
+    }
+
+    if (params->field_mask & UCP_WORKER_PARAM_FIELD_RMA_BATCH_CB_ARG) {
+        worker->rma_batch_callback_arg = params->rma_batch_cb_arg;
+    }
+
+    /* Register internal AM handler */
+    am_handler = (ucp_am_handler_param_t){
+        .field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                    UCP_AM_HANDLER_PARAM_FIELD_CB |
+                    UCP_AM_HANDLER_PARAM_FIELD_ARG,
+        .id         = UCP_AM_ID_PUT_BATCH_NOTIFY,
+        .cb         = ucp_rma_batch_am_handler,  /* This is internal */
+        .arg        = worker->rma_batch_callback_arg
+    };
+    status = ucp_worker_set_am_recv_handler(worker, &am_handler);
 
     /* Initialize connection matching structure */
     ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),

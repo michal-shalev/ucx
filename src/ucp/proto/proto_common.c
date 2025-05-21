@@ -730,6 +730,13 @@ void ucp_proto_request_zcopy_completion(uct_completion_t *self)
     ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
 }
 
+void ucp_proto_request_put_batch_completion(uct_completion_t *self) {
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+    ucs_free(req->send.batch.iov_list);
+    ucp_proto_request_complete_success(req);
+}
+
 int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)
 {
     return (select_param->dt_class == UCP_DATATYPE_CONTIG);

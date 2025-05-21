@@ -29,6 +29,7 @@
     _macro(ucp_put_offload_short_proto) \
     _macro(ucp_put_offload_bcopy_proto) \
     _macro(ucp_put_offload_zcopy_proto) \
+    _macro(ucp_put_batch_offload_proto) \
     _macro(ucp_eager_bcopy_multi_proto) \
     _macro(ucp_eager_sync_bcopy_multi_proto) \
     _macro(ucp_eager_zcopy_multi_proto) \
@@ -89,6 +90,7 @@ const char *ucp_operation_names[] = {
     [UCP_OP_ID_AM_SEND_REPLY]  = "am_send_reply",
     [UCP_OP_ID_STREAM_SEND]    = "stream",
     [UCP_OP_ID_PUT]            = "put",
+    [UCP_OP_ID_PUT_BATCH]      = "put_batch",
     [UCP_OP_ID_GET]            = "get",
     [UCP_OP_ID_AMO_POST]       = "amo_post",
     [UCP_OP_ID_AMO_FETCH]      = "amo_fetch",
@@ -107,6 +109,7 @@ const char *ucp_operation_descs[] = {
                                  "flag",
     [UCP_OP_ID_STREAM_SEND]    = "stream message by ucp_stream_send*",
     [UCP_OP_ID_PUT]            = "remote memory write by ucp_put*",
+    [UCP_OP_ID_PUT_BATCH]      = "remote memory write by ucp_put_batch*",
     [UCP_OP_ID_GET]            = "remote memory read by ucp_get*",
     [UCP_OP_ID_AMO_POST]       = "posted atomic by ucp_atomic_op*",
     [UCP_OP_ID_AMO_FETCH]      = "fetching atomic by ucp_atomic_op*",

@@ -306,3 +306,105 @@ ucp_proto_t ucp_put_offload_zcopy_proto = {
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_request_zcopy_reset
 };
+
+static void
+ucp_proto_put_batch_offload_probe(const ucp_proto_init_params_t *init_params) {
+    ucp_context_t *context                = init_params->worker->context;
+    ucp_proto_single_init_params_t params = {
+        .super.super         = *init_params,
+        .super.latency       = 0,
+        .super.overhead      = 0,
+        .super.cfg_thresh    = context->config.ext.zcopy_thresh,
+        .super.cfg_priority  = 30,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 1,
+        .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
+                                           cap.put.min_zcopy),
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
+                                            cap.put.max_zcopy),
+        .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.put.max_iov),
+        .super.hdr_size      = 0,
+        .super.send_op       = UCT_EP_OP_PUT_ZCOPY,
+        .super.memtype_op    = UCT_EP_OP_PUT_ZCOPY,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY    |
+                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
+                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  |
+                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
+        .super.exclude_map   = 0,
+        .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
+                                                     init_params->select_param),
+        .lane_type           = UCP_LANE_TYPE_RMA_BW,
+        .tl_cap_flags        = UCT_IFACE_FLAG_PUT_BATCH,
+    };
+
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT_BATCH))) {
+        return;
+    }
+
+    ucp_proto_single_probe(&params);
+}
+
+static ucs_status_t
+ucp_proto_put_batch_offload_progress(uct_pending_req_t *self) {
+    ucp_request_t *req                   = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_t *ep                         = req->send.ep;
+    const ucp_proto_config_t *config     = req->send.proto_config;
+    const ucp_proto_single_priv_t *spriv = config->priv;
+    ucp_lane_index_t lane                = spriv->super.lane;
+    ucp_md_index_t md_index              = ucp_ep_md_index(ep, lane);
+    uct_batch_iov_t uct_iov_list[req->send.batch.iov_count];
+    uct_batch_signal_attr_t uct_signal_attr;
+    ucs_status_t status;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_proto_completion_init(&req->send.state.uct_comp,
+                                  ucp_proto_request_put_batch_completion);
+
+        for (size_t i = 0; i < req->send.batch.iov_count; i++) {
+            uct_iov_list[i].local_va  = req->send.batch.iov_list[i].local_va;
+            uct_iov_list[i].memh      = req->send.batch.iov_list[i].memh->uct[md_index];
+            uct_iov_list[i].remote_va = req->send.batch.iov_list[i].remote_va;
+            uct_iov_list[i].length    = req->send.batch.iov_list[i].length;
+            uct_iov_list[i].rkey      = ucp_rkey_get_tl_rkey(req->send.batch.iov_list[i].rkey,
+                                                             spriv->super.rkey_index);
+        }
+
+        uct_signal_attr.am_id  = UCP_AM_ID_PUT_BATCH_NOTIFY;
+        uct_signal_attr.buffer = req->send.batch.completion_message;
+        uct_signal_attr.length = req->send.batch.completion_message_length;
+
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
+
+    status = uct_ep_put_batch_zcopy(ucp_ep_get_lane(ep, lane),
+                                    uct_iov_list,
+                                    req->send.batch.iov_count,
+                                    &uct_signal_attr,
+                                    &req->send.state.uct_comp);
+   if (status == UCS_ERR_NO_RESOURCE) {
+        return status;
+   } else if (status != UCS_INPROGRESS && status != UCS_OK) {
+        ucp_proto_request_abort(req, status);
+        return status;
+    } else if (status == UCS_INPROGRESS) {
+        ++req->send.state.uct_comp.count;
+    }
+
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
+
+    return UCS_OK;
+}
+
+ucp_proto_t ucp_put_batch_offload_proto = {
+    .name     = "put/batch/offload",
+    .desc     = "batch",
+    .flags    = 0,
+    .probe    = ucp_proto_put_batch_offload_probe,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_proto_put_batch_offload_progress},
+    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_return_success
+};
+

@@ -106,7 +106,10 @@ enum {
     }
 
 #define UCT_RC_CHECK_TXQP_RET(_iface, _ep, _ret) \
-    if (uct_rc_txqp_available(&(_ep)->txqp) <= 0) { \
+    UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, 0)
+
+#define UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, _value) \
+    if (uct_rc_txqp_available(&(_ep)->txqp) <= (_value)) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->txqp.stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \

@@ -8,6 +8,7 @@
 #include "test_rc.h"
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
+#include <memory>
 
 
 void test_rc::init()
@@ -112,8 +113,165 @@ UCS_TEST_P(test_rc, flush_fc, "FLUSH_MODE?=fc") {
     } while (status != UCS_OK);
 }
 
-UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
+template <typename T, typename... Args>
+std::unique_ptr<T> make_unique(Args&&... args)
+{
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
 
+// Test is actually not really RC specific
+UCS_TEST_P(test_rc, put_batch_1b)
+{
+    if (!has_transport("rc_mlx5")) {
+        UCS_TEST_SKIP_R("No rc_x transport");
+    }
+
+    // Values
+    constexpr uint64_t seed = 0x3fea01;
+    size_t size             = 512 * UCS_MBYTE;
+    int len                 = 16; // high ratio of atomic versus rdma
+    size_t batch_size;
+    uct_batch_iov_t list[len];
+    uct_batch_signal_attr_t signal_attr = {0};
+    ucs_status_t status;
+    int i, j;
+
+    for (len = 4; len < 32; len *= 2) {
+    for (batch_size = 128 * UCS_KBYTE; batch_size < size; batch_size *= 2) {
+        // Memory areas
+        mapped_buffer sigbuf(8, 0ul,  *m_e2);
+        sigbuf.memset(0);
+
+        mapped_buffer sends(size, 0ul, *m_e1);
+        mapped_buffer recvs(size, 0ul, *m_e2);
+        sends.pattern_fill(seed);
+        recvs.memset(0x11);
+
+        // Completion
+        size_t acks = size / batch_size;
+        uct_completion_t comp;
+        comp.func   = [](uct_completion_t*) {};
+        comp.count  = acks;
+        comp.status = UCS_OK;
+
+        ucs_time_t start_time = ucs_get_time();
+        for (i = 0; i < size; i += batch_size) {
+            for (j = 0; j < len; ++j) {
+                off_t off = i + (j * batch_size / len);
+                list[j].local_va  = reinterpret_cast<void *>(sends.addr() + off);
+                list[j].memh      = sends.memh();
+                list[j].remote_va = recvs.addr() + off;
+                list[j].length    = batch_size / len;
+                list[j].rkey      = recvs.rkey();
+            }
+
+            signal_attr.am_id  = 27;
+            signal_attr.buffer = sigbuf.ptr();
+            signal_attr.length = 8;
+
+            for (;;) {
+                status = uct_ep_put_batch_zcopy(m_e1->ep(0), list, len,
+                                                &signal_attr,
+                                                &comp);
+                if (status == UCS_ERR_NO_RESOURCE) {
+                    progress_loop();
+                    continue;
+                }
+
+                EXPECT_EQ(UCS_INPROGRESS, status);
+                break;
+            }
+        }
+
+        wait_for_value(&comp.count, 0, true);
+        EXPECT_EQ(0, comp.count);
+
+        auto tput = (float)size / UCS_MBYTE
+            / ucs_time_to_sec(ucs_get_time() - start_time);
+        UCS_TEST_MESSAGE << size / UCS_MBYTE << "MB: " << len << "x"
+            << batch_size / UCS_KBYTE / len << "kB per batch: " << tput << "MBps";
+
+        recvs.pattern_check(seed);
+    }}
+}
+
+UCS_TEST_P(test_rc, put_batch)
+{
+    if (!has_transport("rc_mlx5")) {
+        UCS_TEST_SKIP_R("No rc_x transport");
+    }
+
+    int window             = 1000;
+    uint64_t seed          = 0xabcde;
+    size_t offset          = 0;
+    size_t size            = 16 * UCS_MBYTE;
+    constexpr int max_len  = 16;
+    uct_batch_signal_attr_t signal_attr = {0};
+
+    uct_batch_iov_t list[max_len];
+    int len;
+
+    mapped_buffer sigbuf(8 * max_len, 0ul,  *m_e2);
+    sigbuf.memset(0);
+
+    for (int tries = 2; tries > 0; --tries, offset = 0) {
+
+        for (len = 1; len <= max_len; len *= 2, offset += 8) {
+            UCS_TEST_MESSAGE << "size=" << size << " list_len=" << len;
+            ucs_status_t status;
+
+            /* Make sure to have different rkeys */
+            std::vector<std::unique_ptr<mapped_buffer>> sends, recvs;
+
+            for (size_t i = 0; i < len;  i++) {
+                sends.emplace_back(make_unique<mapped_buffer>(size, 0ul, *m_e1));
+                recvs.emplace_back(make_unique<mapped_buffer>(size, 0ul, *m_e2));
+
+                sends.back()->pattern_fill(seed + i);
+                recvs.back()->memset(0x11);
+
+                list[i].local_va  = sends.back()->ptr();
+                list[i].memh      = sends.back()->memh();
+                list[i].remote_va = recvs.back()->addr();
+                list[i].length    = size;
+                list[i].rkey      = recvs.back()->rkey();
+            }
+
+            signal_attr.am_id  = 27;
+            signal_attr.buffer = sigbuf.ptr();
+            signal_attr.length = 8 * max_len;
+
+            uct_completion_t comp;
+            comp.func   = [](uct_completion_t*) {};
+            comp.count  = window;
+            comp.status = UCS_OK;
+
+            for (int r = 0; r < window; ++r) {
+                for (;;) {
+                    status = uct_ep_put_batch_zcopy(m_e1->ep(0), list, len,
+                                                    &signal_attr,
+                                                    &comp);
+                    if (status == UCS_ERR_NO_RESOURCE) {
+                        progress_loop();
+                        continue;
+                    }
+
+                    EXPECT_EQ(UCS_INPROGRESS, status);
+                    break;
+                }
+            }
+
+            wait_for_value(&comp.count, 0, true);
+            EXPECT_EQ(0, comp.count);
+
+            for (size_t i = 0; i < len; i++) {
+                recvs[i]->pattern_check(seed + i);
+            }
+        }
+    }
+}
+
+UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
 class test_rc_max_wr : public test_rc {
 protected:

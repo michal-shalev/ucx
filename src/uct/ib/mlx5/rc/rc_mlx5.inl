@@ -646,6 +646,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     void *next_seg;
 
     if (!(fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE)) {
+        /* TODO maybe bypass moderation for put batch case */
         fm_ce_se |= uct_rc_iface_tx_moderation(&iface->super, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
     }
 

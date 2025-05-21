@@ -85,7 +85,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
 
   {"DDP_ENABLE", "try",
    "Enable direct data placement\n",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, ddp_enable), 
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, ddp_enable),
    UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
@@ -235,12 +235,14 @@ void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
         const uint##_bits##_t *value = resp; \
         \
         VALGRIND_MAKE_MEM_DEFINED(value, sizeof(*value)); \
-        if (resp == (desc + 1)) { \
-            *dest = *value; /* response in desc buffer */ \
-        } else if (_bits == 32) { \
-            *dest = ntohl(*value);  /* response in CQE as 32-bit value */ \
-        } else if (_bits == 64) { \
-            *dest = be64toh(*value); /* response in CQE as 64-bit value */ \
+        if (ucs_unlikely(dest != NULL)) { \
+            if (resp == (desc + 1)) { \
+                *dest = *value; /* response in desc buffer */ \
+            } else if (_bits == 32) { \
+                *dest = ntohl(*value);  /* response in CQE as 32-bit value */ \
+            } else if (_bits == 64) { \
+                *dest = be64toh(*value); /* response in CQE as 64-bit value */ \
+            } \
         } \
         \
         uct_invoke_completion(desc->super.user_comp, UCS_OK); \

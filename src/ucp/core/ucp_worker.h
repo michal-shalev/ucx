@@ -335,6 +335,8 @@ typedef struct ucp_worker {
 
     ucs_cpu_set_t                    cpu_mask;            /* Save CPU mask for subsequent calls to
                                                              ucp_worker_listen */
+    ucp_rma_batch_callback_t         rma_batch_callback;  /* RMA batch callback */
+    void                             *rma_batch_callback_arg; /* RMA batch callback argument */
 
     ucp_worker_rkey_config_hash_t    rkey_config_hash;    /* RKEY config key -> index */
     ucp_worker_discard_uct_ep_hash_t discard_uct_ep_hash; /* Hash of discarded UCT EPs */

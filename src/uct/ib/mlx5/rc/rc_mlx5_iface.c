@@ -179,6 +179,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
         return status;
     }
 
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_PUT_BATCH;
+
     if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
         ep_addr_len = sizeof(uct_rc_mlx5_ep_ext_address_t) + sizeof(uint16_t);
     } else {
@@ -1011,6 +1013,7 @@ static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .ep_put_short             = uct_rc_mlx5_base_ep_put_short,
     .ep_put_bcopy             = uct_rc_mlx5_base_ep_put_bcopy,
     .ep_put_zcopy             = uct_rc_mlx5_base_ep_put_zcopy,
+    .ep_put_batch_zcopy       = uct_rc_mlx5_base_ep_put_batch_zcopy,
     .ep_get_bcopy             = uct_rc_mlx5_base_ep_get_bcopy,
     .ep_get_zcopy             = uct_rc_mlx5_base_ep_get_zcopy,
     .ep_am_short              = uct_rc_mlx5_base_ep_am_short,

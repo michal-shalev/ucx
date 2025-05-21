@@ -336,6 +336,91 @@ out_unlock:
     return ret;
 }
 
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_rma_prepare_batch,
+                 (ep, list, list_len, param),
+                 ucp_ep_h ep, const ucp_rma_batch_iov_elem_t *list,
+                 size_t list_len, const ucp_rma_batch_param_t *param)
+{
+    ucp_worker_h worker = ep->worker;
+    ucs_status_t status;
+    ucp_proto_select_param_t sel_param;
+    ucp_request_t *req;
+    ucs_status_ptr_t ret;
+    ucp_memory_info_t mem_info;
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+
+    if (!worker->context->config.ext.proto_enable) {
+        ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
+        goto out_unlock;
+    }
+
+    req = ucp_request_get(worker);
+    if (req == NULL) {
+        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        goto out_unlock;
+    }
+
+    req->send.batch.iov_list = ucs_malloc(list_len * sizeof(ucp_rma_batch_iov_elem_t),
+                                          "ucp_rma_batch_iov_list");
+    if (req->send.batch.iov_list == NULL) {
+        ucp_request_put(req);
+        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        goto out_unlock;
+    }
+
+    memcpy(req->send.batch.iov_list, list, list_len * sizeof(ucp_rma_batch_iov_elem_t));
+    req->send.batch.iov_count                 = list_len;
+    req->send.ep                              = ep;
+
+    if (param != NULL) {
+        req->send.batch.completion_message        = param->field_mask &
+                                                    UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE ?
+                                                    param->completion_message : NULL;
+
+        req->send.batch.completion_message_length = param->field_mask &
+                                                    UCP_RMA_BATCH_FIELD_COMPLETION_MESSAGE_LENGTH ?
+                                                    param->completion_message_length : 0;
+    } else {
+        req->send.batch.completion_message        = NULL;
+        req->send.batch.completion_message_length = 0;
+    }
+
+    ucp_proto_request_send_init(req, ep, 0);
+    ucp_memory_info_set_host(&mem_info);
+
+    ucp_proto_select_param_init(&sel_param, UCP_OP_ID_PUT_BATCH,
+                                0, 0, 0, &mem_info, 1);
+
+    status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
+                              &ucp_ep_config(ep)->proto_select,
+                              list[0].rkey->cfg_index, &sel_param, 0);
+    if (status != UCS_OK) {
+        ucs_free(req->send.batch.iov_list);
+        ucp_request_put(req);
+        ret = UCS_STATUS_PTR(status);
+        goto out_unlock;
+    }
+
+    ret = req + 1; /* return a pointer tagged as a request */
+
+out_unlock:
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+    return ret;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_rma_post_batch, (request),
+                 void *request) {
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(req->send.ep->worker);
+
+    UCS_PROFILE_CALL_VOID(ucp_request_send, req);
+
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(req->send.ep->worker);
+    return request;
+}
+
 ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey)
 {

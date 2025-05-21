@@ -377,6 +377,19 @@ struct ucp_request {
                     /* Atomic reply data */
                     ucp_atomic_reply_t data;
                 } atomic_reply;
+
+                struct {
+                    /* I/O vector list for the batch operation */
+                    ucp_rma_batch_iov_elem_t *iov_list;
+                    /* Number of I/O vectors in the list */
+                    size_t                   iov_count;
+                    /* completion message for batch operations */
+                    void                     *completion_message;
+                    /* completion message length */
+                    size_t                   completion_message_length;
+                    /* completion message callback */
+                    ucp_rma_batch_callback_t completion_message_cb;
+                } batch;
             };
 
             union {

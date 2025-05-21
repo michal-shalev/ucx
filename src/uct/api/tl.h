@@ -44,6 +44,14 @@ typedef ucs_status_t (*uct_ep_put_zcopy_func_t)(uct_ep_h ep,
                                                 uct_rkey_t rkey,
                                                 uct_completion_t *comp);
 
+typedef struct uct_batch_iov uct_batch_iov_t;
+typedef struct uct_batch_signal_attr uct_batch_signal_attr_t;
+typedef ucs_status_t (*uct_ep_put_batch_zcopy_func_t)(uct_ep_h ep,
+                                                      const uct_batch_iov_t *list,
+                                                      size_t list_len,
+                                                      const uct_batch_signal_attr_t *signal_attr,
+                                                      uct_completion_t *comp);
+
 /* endpoint - get */
 
 typedef ucs_status_t (*uct_ep_get_short_func_t)(uct_ep_h ep,
@@ -298,6 +306,7 @@ typedef struct uct_iface_ops {
     uct_ep_put_short_func_t             ep_put_short;
     uct_ep_put_bcopy_func_t             ep_put_bcopy;
     uct_ep_put_zcopy_func_t             ep_put_zcopy;
+    uct_ep_put_batch_zcopy_func_t       ep_put_batch_zcopy;
 
     /* endpoint - get */
     uct_ep_get_short_func_t             ep_get_short;

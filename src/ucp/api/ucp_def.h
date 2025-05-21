@@ -38,6 +38,12 @@ typedef struct ucp_am_recv_param             ucp_am_recv_param_t;
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief Operation parameters provided in @ref ucp_rma_batch_callback_t callback.
+ */
+typedef struct ucp_rma_batch_recv_param      ucp_rma_batch_recv_param_t;
+
+/**
  * @ingroup UCP_CONTEXT
  * @brief UCP Application Context
  *
@@ -628,7 +634,7 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  * @param [in]  header        User defined active message header.
  *                            If @a header_length is 0, this value is undefined
  *                            and must not be accessed.
- * @param [in]  header_length Active message header length in bytes. 
+ * @param [in]  header_length Active message header length in bytes.
  * @param [in]  data          Points to the received data if @a
  *                            UCP_AM_RECV_ATTR_FLAG_RNDV flag is not set in
  *                            @ref ucp_am_recv_param_t.recv_attr. Otherwise
@@ -671,6 +677,42 @@ typedef ucs_status_t (*ucp_am_recv_callback_t)(void *arg, const void *header,
                                                size_t header_length,
                                                void *data, size_t length,
                                                const ucp_am_recv_param_t *param);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Callback to process incoming RMA batch sent by
+ * @ref ucp_ep_rma_post_batch routine.
+ *
+ * The callback is always called from the progress context, therefore calling
+ * @ref ucp_worker_progress() is not allowed. It is recommended to define
+ * callbacks with relatively short execution time to avoid blocking of
+ * communication progress.
+ *
+ * @param [in]  arg                       User-defined argument.
+ * @param [in]  completion_message        Points to the received message buffer.
+ * @param [in]  completion_message_length Length of message.
+ * @param [in]  param                     RMA batch parameters.
+ *
+ * @return UCS_OK        @a completion_message will not persist after the
+ *                       callback returns.
+ *
+ * @return UCS_INPROGRESS The @a completion_message will persist after the
+ *                        callback has returned.
+ *
+ * @return otherwise      In this case data descriptor @a completion_message
+ *                        will be dropped and the corresponding @ref
+ *                        ucp_ep_rma_post_batch call on the sender side will
+ *                        complete with the status returned from the callback.
+ *
+ * @note This callback should be set and released
+ *       by @ref ucp_worker_set_rma_batch_handler function.
+ *
+ */
+typedef ucs_status_t (*ucp_rma_batch_callback_t)(void *arg,
+                                                 void *completion_message,
+                                                 size_t completion_message_length,
+                                                 ucp_rma_batch_recv_param_t *param);
 
 
 /**
@@ -801,8 +843,8 @@ typedef struct ucp_ep_params {
  *     ep_attrs.transports.entry_size = sizeof(ucp_transport_entry_t);
  *     status = ucp_ep_query(ep, &ep_attrs);
  *     if (status == UCS_OK) {
- *         // ep_attrs.transports.num_entries = number of returned entries 
- *         // ... process transport info ... 
+ *         // ep_attrs.transports.num_entries = number of returned entries
+ *         // ... process transport info ...
  *     }
  *   }
  * @endcode
@@ -821,7 +863,7 @@ typedef struct {
     /**
      * The name of a transport layer used by this endpoint. This '\0'-terminated
      * string is valid until the endpoint is closed using a
-     * @ref ucp_ep_close_nbx call. 
+     * @ref ucp_ep_close_nbx call.
      */
     const char *transport_name;
 
@@ -840,7 +882,7 @@ typedef struct {
  * @brief Structure containing an array of transport layers and device names
  * used by an endpoint.
  *
- * The caller is responsible for allocation and deallocation of 
+ * The caller is responsible for allocation and deallocation of
  * this structure.
  */
 typedef struct {

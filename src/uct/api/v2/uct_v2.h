@@ -359,7 +359,7 @@ typedef enum {
 /**
  * @ingroup UCT_RESOURCE
  * @brief uct_ep_connect_to_ep_v2 operation fields and flags
- * 
+ *
  * The enumeration allows specifying which fields in @ref
  * uct_ep_connect_to_ep_params_t are present and operation flags are used. It is
  * used to enable backward compatibility support.
@@ -1200,6 +1200,89 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
                                 const uct_rkey_unpack_params_t *params,
                                 uct_rkey_bundle_t *rkey_ob);
 
+
+/**
+ * @ingroup UCT_RMA
+ * @brief Structure describing a single IOV entry for batch operations
+ */
+typedef struct uct_batch_iov {
+    /**
+     * Local virtual address of the data to be transferred
+     */
+    void                    *local_va;
+
+    /**
+     * Local memory registration handler
+     */
+    uct_mem_h               memh;
+
+    /**
+     * Remote virtual address where the data will be written
+     */
+    uint64_t                remote_va;
+
+    /**
+     * Length of the data to be transferred in bytes
+     */
+    size_t                  length;
+
+    /**
+     * Remote key for accessing the remote memory region
+     */
+    uct_rkey_t              rkey;
+} uct_batch_iov_t;
+
+/**
+ * @ingroup UCT_RMA
+ * @brief Signal attribute for batch operations
+ */
+typedef struct uct_batch_signal_attr {
+    /**
+     * AM ID to signal when the batch is completed
+     */
+    uint8_t                 am_id;
+
+    /**
+     * Buffer to signal when the batch is completed
+     */
+    void                   *buffer;
+
+    /**
+     * Length of the buffer to signal when the batch is completed
+     */
+    size_t                  length;
+} uct_batch_signal_attr_t;
+
+/**
+ * @ingroup UCT_RMA
+ * @brief Put multiple data blocks to remote memory in a batch operation
+ *
+ * This routine puts multiple data blocks from local memory to remote memory
+ * in a single batch operation. The operation is completed when all data blocks
+ * have been transferred and the signal variable has been updated.
+ *
+ * @param [in]  ep              Endpoint to use for the operation
+ * @param [in]  list            Array of IOV entries describing the data blocks
+ * @param [in]  list_len        Number of entries in the IOV list
+ * @param [in]  signal_attr     Signal attribute for batch operations
+ * @param [in]  comp            Completion callback to be called when the overall operation is completed
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+UCT_INLINE_API ucs_status_t
+uct_ep_put_batch_zcopy(uct_ep_h ep,
+                       const uct_batch_iov_t *list,
+                       size_t list_len,
+                       const uct_batch_signal_attr_t *signal_attr,
+                       uct_completion_t *comp)
+{
+    if (ep->iface->ops.ep_put_batch_zcopy != NULL) {
+        return ep->iface->ops.ep_put_batch_zcopy(ep, list, list_len,
+                                                 signal_attr, comp);
+    } else {
+        return UCS_ERR_UNSUPPORTED;
+    }
+}
 
 END_C_DECLS
 

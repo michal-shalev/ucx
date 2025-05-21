@@ -662,3 +662,103 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
+
+class test_ucp_rma_batch : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AMO64);
+    }
+
+    void force_wireup(void *sbuf, size_t size, uint64_t target, ucp_rkey_h rkey,
+                      ucp_request_param_t *param) {
+        ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), sbuf, size, target, rkey, param);
+        ASSERT_FALSE(UCS_PTR_IS_ERR(sptr));
+
+        flush_workers();
+        ucp_request_release(sptr);
+    }
+
+    void poll_signal(mapped_buffer& signal) {
+        uint64_t *signal_value = static_cast<uint64_t*>(signal.ptr());
+        while (*signal_value == 0) {
+            ucp_worker_progress(sender().worker());
+        }
+    }
+
+    void test_put_batch() {
+        const size_t num_iov = 8;
+        const size_t buf_size = 8 * 1024;
+        ucp_request_param_t param = {0};
+        ucp_rma_batch_param_t batch_param = {0};
+
+        mapped_buffer src_bufs[num_iov] = {
+            mapped_buffer(buf_size, sender()),
+            mapped_buffer(buf_size, sender()),
+            mapped_buffer(buf_size, sender()),
+            mapped_buffer(buf_size, sender()),
+            mapped_buffer(buf_size, sender()),
+            mapped_buffer(buf_size, sender()),
+            mapped_buffer(buf_size, sender()),
+            mapped_buffer(buf_size, sender())
+        };
+
+        mapped_buffer dst_bufs[num_iov] = {
+            mapped_buffer(buf_size, receiver()),
+            mapped_buffer(buf_size, receiver()),
+            mapped_buffer(buf_size, receiver()),
+            mapped_buffer(buf_size, receiver()),
+            mapped_buffer(buf_size, receiver()),
+            mapped_buffer(buf_size, receiver()),
+            mapped_buffer(buf_size, receiver()),
+            mapped_buffer(buf_size, receiver())
+        };
+
+        ucs::handle<ucp_rkey_h> rkeys[num_iov];
+        ucp_rma_batch_iov_elem_t batch_iov[num_iov];
+
+        for (size_t i = 0; i < num_iov; i++) {
+            src_bufs[i].memset(i + 1);
+            dst_bufs[i].memset(0);
+            dst_bufs[i].rkey(sender(), rkeys[i]);
+
+            batch_iov[i].opcode      = UCP_OP_PUT;
+            batch_iov[i].local_va    = src_bufs[i].ptr();
+            batch_iov[i].remote_va   = (uint64_t)dst_bufs[i].ptr();
+            batch_iov[i].length      = buf_size;
+            batch_iov[i].rkey        = rkeys[i];
+            batch_iov[i].memh        = src_bufs[i].memh();
+        }
+
+        force_wireup(src_bufs[0].ptr(), sizeof(uint64_t),
+                     batch_iov[0].remote_va, rkeys[0], &param);
+
+        ucs_status_ptr_t sptr = ucp_ep_rma_prepare_batch(sender().ep(),
+                                                         batch_iov,
+                                                         num_iov,
+                                                         &batch_param);
+        ASSERT_UCS_PTR_OK(sptr);
+
+
+        sptr = ucp_ep_rma_post_batch(sptr);
+        ASSERT_UCS_PTR_OK(sptr);
+
+        while (!ucp_request_is_completed(sptr)) {
+            ucp_worker_progress(sender().worker());
+        }
+
+        for (size_t i = 0; i < num_iov; i++) {
+            uint8_t *dst_data = static_cast<uint8_t*>(dst_bufs[i].ptr());
+            uint8_t expected = i + 1;
+            EXPECT_EQ(expected, dst_data[i]);
+        }
+
+        ucp_request_release(sptr);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_batch, test_put_batch) {
+    test_put_batch();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_batch, rc_dc, "rc,dc")
+

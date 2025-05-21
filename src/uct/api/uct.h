@@ -377,6 +377,7 @@ typedef enum uct_atomic_op {
 #define UCT_IFACE_FLAG_PUT_SHORT      UCS_BIT(4)  /**< Short put */
 #define UCT_IFACE_FLAG_PUT_BCOPY      UCS_BIT(5)  /**< Buffered put */
 #define UCT_IFACE_FLAG_PUT_ZCOPY      UCS_BIT(6)  /**< Zero-copy put */
+#define UCT_IFACE_FLAG_PUT_BATCH      UCS_BIT(7)  /**< Put batch */
 
         /* GET capabilities */
 #define UCT_IFACE_FLAG_GET_SHORT      UCS_BIT(8)  /**< Short get */

@@ -118,6 +118,110 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 #endif
 }
 
+static size_t
+uct_rc_mlx5_base_ep_put_batch_signal_pack_cb(void *dest, void *arg)
+{
+    uct_batch_signal_attr_t *signal_attr = arg;
+    ssize_t length = signal_attr->length;
+    memcpy(dest, signal_attr->buffer, length);
+    return length;
+}
+
+ucs_status_t
+uct_rc_mlx5_base_ep_put_batch_zcopy(uct_ep_h tl_ep,
+                                    const uct_batch_iov_t *list,
+                                    size_t list_len,
+                                    const uct_batch_signal_attr_t *signal_attr,
+                                    uct_completion_t *comp)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    size_t total = 0;
+    size_t i;
+    ucs_status_t status;
+    uct_iov_t iov;
+    uct_rkey_t rkey;
+    uint64_t remote_addr;
+    ssize_t am_length;
+
+    if (comp == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    for (i = 0; i < list_len; i++) {
+        if (list[i].length == 0) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        total += list[i].length;
+        UCT_CHECK_LENGTH(list[i].length, 0, UCT_IB_MAX_MESSAGE_SIZE,
+                     "put_batch_zcopy");
+    }
+
+    if (total == 0) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /*
+     * Resource check mechanism is different from other operations. It means
+     * that with the pending handling, a put_batch has no ordering guarantee
+     * wrt to any operations.
+     *
+     * So not adding the uct_rc_mlx5_ep_fence_put() function not to make false
+     * promises.
+     */
+    ucs_assert(ep->super.flags & UCT_RC_EP_FLAG_CONNECTED);
+
+    /* Needs one CQE for the atomic operation, do we need more in case of error */
+    UCT_RC_CHECK_CQE_RET(&iface->super, &ep->super, UCS_ERR_NO_RESOURCE);
+    /* Needs one TXQP for AMO but many tx available for posting */
+    UCT_RC_CHECK_TXQP_VALUE_RET(&iface->super, &ep->super,
+                                UCS_ERR_NO_RESOURCE, list_len + 1);
+
+    for (i = 0; i < list_len; i++) {
+        iov.buffer = list[i].local_va;
+        iov.length = list[i].length;
+        iov.memh   = list[i].memh;
+        iov.stride = list[i].length; /* Should not be used anyways */
+        iov.count  = 1;
+
+        remote_addr = list[i].remote_va;
+        rkey        = list[i].rkey;
+
+        status = uct_rc_mlx5_base_ep_zcopy_post(
+                ep, MLX5_OPCODE_RDMA_WRITE, &iov, 1, 0ul, 0, NULL, 0,
+                remote_addr, rkey, 0ul, 0, 0, NULL, 0,
+                NULL, 0, NULL);
+        if (status != UCS_INPROGRESS) {
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+
+    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY,
+                                 total);
+
+    if (signal_attr->length <= UCT_IB_MLX5_AM_MAX_SHORT(0)) {
+        status = uct_rc_mlx5_base_ep_am_short_inline(tl_ep, signal_attr->am_id,
+                                                     0, signal_attr->buffer,
+                                                     signal_attr->length);
+    } else {
+        am_length = uct_rc_mlx5_base_ep_am_bcopy(tl_ep, signal_attr->am_id,
+                                                 uct_rc_mlx5_base_ep_put_batch_signal_pack_cb,
+                                                 (void *)signal_attr, 0);
+
+        if (am_length < 0) {
+            status = (ucs_status_t)am_length;
+        } else {
+            status = UCS_OK;
+        }
+    }
+
+    if ((status != UCS_OK) && (status != UCS_INPROGRESS)) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return status;
+}
+
 ssize_t uct_rc_mlx5_base_ep_put_bcopy(uct_ep_h tl_ep,
                                       uct_pack_callback_t pack_cb, void *arg,
                                       uint64_t remote_addr, uct_rkey_t rkey)

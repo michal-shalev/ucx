@@ -119,6 +119,7 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_PUT_SHORT)]        = "put short",
     [ucs_ilog2(UCT_IFACE_FLAG_PUT_BCOPY)]        = "put bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_PUT_ZCOPY)]        = "put zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_PUT_BATCH)]        = "put batch",
     [ucs_ilog2(UCT_IFACE_FLAG_GET_SHORT)]        = "get short",
     [ucs_ilog2(UCT_IFACE_FLAG_GET_BCOPY)]        = "get bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_GET_ZCOPY)]        = "get zcopy",
@@ -617,6 +618,13 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                                 0, criteria->arg);
             priority     = iface_attr->priority + ae->iface_attr.priority;
             is_reachable = 1;
+
+            // /* print all the high-bw lanes that were found */
+            // if (strncmp(criteria->title, "high-bw remote memory access", 28) == 0) {
+            //     printf("%s addr[%u] : %s score %.2f priority %d \n",
+            //            ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
+            //            addr_index, criteria->title, score, priority);
+            // }
 
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       "->addr[%u] : %s score %.2f priority %d",
