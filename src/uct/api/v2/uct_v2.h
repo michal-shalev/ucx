@@ -1236,7 +1236,7 @@ typedef struct uct_batch_iov {
  * @ingroup UCT_RMA
  * @brief Signal attribute for batch operations
  */
-typedef struct uct_batch_signal_attr {
+typedef struct uct_batch_completion_attr {
     /**
      * AM ID to signal when the batch is completed
      */
@@ -1245,13 +1245,13 @@ typedef struct uct_batch_signal_attr {
     /**
      * Buffer to signal when the batch is completed
      */
-    void                   *buffer;
+    void                   *completion_message;
 
     /**
      * Length of the buffer to signal when the batch is completed
      */
-    size_t                  length;
-} uct_batch_signal_attr_t;
+    size_t                  completion_message_length;
+} uct_batch_completion_attr_t;
 
 /**
  * @ingroup UCT_RMA
@@ -1259,12 +1259,12 @@ typedef struct uct_batch_signal_attr {
  *
  * This routine puts multiple data blocks from local memory to remote memory
  * in a single batch operation. The operation is completed when all data blocks
- * have been transferred and the signal variable has been updated.
+ * have been transferred and the completion message has been updated.
  *
  * @param [in]  ep              Endpoint to use for the operation
  * @param [in]  list            Array of IOV entries describing the data blocks
  * @param [in]  list_len        Number of entries in the IOV list
- * @param [in]  signal_attr     Signal attribute for batch operations
+ * @param [in]  completion_attr Completion attribute for batch operations
  * @param [in]  comp            Completion callback to be called when the overall operation is completed
  *
  * @return Error code as defined by @ref ucs_status_t
@@ -1273,12 +1273,12 @@ UCT_INLINE_API ucs_status_t
 uct_ep_put_batch_zcopy(uct_ep_h ep,
                        const uct_batch_iov_t *list,
                        size_t list_len,
-                       const uct_batch_signal_attr_t *signal_attr,
+                       const uct_batch_completion_attr_t *completion_attr,
                        uct_completion_t *comp)
 {
     if (ep->iface->ops.ep_put_batch_zcopy != NULL) {
         return ep->iface->ops.ep_put_batch_zcopy(ep, list, list_len,
-                                                 signal_attr, comp);
+                                                 completion_attr, comp);
     } else {
         return UCS_ERR_UNSUPPORTED;
     }

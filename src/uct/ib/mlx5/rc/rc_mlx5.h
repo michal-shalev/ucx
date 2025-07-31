@@ -116,7 +116,7 @@ ucs_status_t
 uct_rc_mlx5_base_ep_put_batch_zcopy(uct_ep_h ep,
                                     const uct_batch_iov_t *list,
                                     size_t list_len,
-                                    const uct_batch_signal_attr_t *signal_attr,
+                                    const uct_batch_completion_attr_t *completion_attr,
                                     uct_completion_t *comp);
 
 ucs_status_t

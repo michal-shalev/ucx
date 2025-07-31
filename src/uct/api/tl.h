@@ -45,11 +45,11 @@ typedef ucs_status_t (*uct_ep_put_zcopy_func_t)(uct_ep_h ep,
                                                 uct_completion_t *comp);
 
 typedef struct uct_batch_iov uct_batch_iov_t;
-typedef struct uct_batch_signal_attr uct_batch_signal_attr_t;
+typedef struct uct_batch_completion_attr uct_batch_completion_attr_t;
 typedef ucs_status_t (*uct_ep_put_batch_zcopy_func_t)(uct_ep_h ep,
                                                       const uct_batch_iov_t *list,
                                                       size_t list_len,
-                                                      const uct_batch_signal_attr_t *signal_attr,
+                                                      const uct_batch_completion_attr_t *completion_attr,
                                                       uct_completion_t *comp);
 
 /* endpoint - get */

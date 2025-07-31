@@ -119,11 +119,11 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 }
 
 static size_t
-uct_rc_mlx5_base_ep_put_batch_signal_pack_cb(void *dest, void *arg)
+uct_rc_mlx5_base_ep_put_batch_completion_pack_cb(void *dest, void *arg)
 {
-    uct_batch_signal_attr_t *signal_attr = arg;
-    ssize_t length = signal_attr->length;
-    memcpy(dest, signal_attr->buffer, length);
+    uct_batch_completion_attr_t *completion_attr = arg;
+    ssize_t length = completion_attr->completion_message_length;
+    memcpy(dest, completion_attr->completion_message, length);
     return length;
 }
 
@@ -131,7 +131,7 @@ ucs_status_t
 uct_rc_mlx5_base_ep_put_batch_zcopy(uct_ep_h tl_ep,
                                     const uct_batch_iov_t *list,
                                     size_t list_len,
-                                    const uct_batch_signal_attr_t *signal_attr,
+                                    const uct_batch_completion_attr_t *completion_attr,
                                     uct_completion_t *comp)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
@@ -199,14 +199,14 @@ uct_rc_mlx5_base_ep_put_batch_zcopy(uct_ep_h tl_ep,
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY,
                                  total);
 
-    if (signal_attr->length <= UCT_IB_MLX5_AM_MAX_SHORT(0)) {
-        status = uct_rc_mlx5_base_ep_am_short_inline(tl_ep, signal_attr->am_id,
-                                                     0, signal_attr->buffer,
-                                                     signal_attr->length);
+    if (completion_attr->completion_message_length <= UCT_IB_MLX5_AM_MAX_SHORT(0)) {
+        status = uct_rc_mlx5_base_ep_am_short_inline(tl_ep, completion_attr->am_id,
+                                                     0, completion_attr->completion_message,
+                                                     completion_attr->completion_message_length);
     } else {
-        am_length = uct_rc_mlx5_base_ep_am_bcopy(tl_ep, signal_attr->am_id,
-                                                 uct_rc_mlx5_base_ep_put_batch_signal_pack_cb,
-                                                 (void *)signal_attr, 0);
+        am_length = uct_rc_mlx5_base_ep_am_bcopy(tl_ep, completion_attr->am_id,
+                                                 uct_rc_mlx5_base_ep_put_batch_completion_pack_cb,
+                                                 (void *)completion_attr, 0);
 
         if (am_length < 0) {
             status = (ucs_status_t)am_length;

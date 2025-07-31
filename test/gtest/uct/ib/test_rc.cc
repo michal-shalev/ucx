@@ -132,7 +132,7 @@ UCS_TEST_P(test_rc, put_batch_1b)
     int len                 = 16; // high ratio of atomic versus rdma
     size_t batch_size;
     uct_batch_iov_t list[len];
-    uct_batch_signal_attr_t signal_attr = {0};
+    uct_batch_completion_attr_t completion_attr = {0};
     ucs_status_t status;
     int i, j;
 
@@ -165,13 +165,13 @@ UCS_TEST_P(test_rc, put_batch_1b)
                 list[j].rkey      = recvs.rkey();
             }
 
-            signal_attr.am_id  = 27;
-            signal_attr.buffer = sigbuf.ptr();
-            signal_attr.length = 8;
+            completion_attr.am_id  = 27;
+            completion_attr.completion_message = sigbuf.ptr();
+            completion_attr.completion_message_length = 8;
 
             for (;;) {
                 status = uct_ep_put_batch_zcopy(m_e1->ep(0), list, len,
-                                                &signal_attr,
+                                                &completion_attr,
                                                 &comp);
                 if (status == UCS_ERR_NO_RESOURCE) {
                     progress_loop();
@@ -206,7 +206,7 @@ UCS_TEST_P(test_rc, put_batch)
     size_t offset          = 0;
     size_t size            = 16 * UCS_MBYTE;
     constexpr int max_len  = 16;
-    uct_batch_signal_attr_t signal_attr = {0};
+    uct_batch_completion_attr_t completion_attr = {0};
 
     uct_batch_iov_t list[max_len];
     int len;
@@ -237,9 +237,9 @@ UCS_TEST_P(test_rc, put_batch)
                 list[i].rkey      = recvs.back()->rkey();
             }
 
-            signal_attr.am_id  = 27;
-            signal_attr.buffer = sigbuf.ptr();
-            signal_attr.length = 8 * max_len;
+            completion_attr.am_id  = 27;
+            completion_attr.completion_message = sigbuf.ptr();
+            completion_attr.completion_message_length = 8 * max_len;
 
             uct_completion_t comp;
             comp.func   = [](uct_completion_t*) {};
@@ -249,7 +249,7 @@ UCS_TEST_P(test_rc, put_batch)
             for (int r = 0; r < window; ++r) {
                 for (;;) {
                     status = uct_ep_put_batch_zcopy(m_e1->ep(0), list, len,
-                                                    &signal_attr,
+                                                    &completion_attr,
                                                     &comp);
                     if (status == UCS_ERR_NO_RESOURCE) {
                         progress_loop();

@@ -355,7 +355,7 @@ ucp_proto_put_batch_offload_progress(uct_pending_req_t *self) {
     ucp_lane_index_t lane                = spriv->super.lane;
     ucp_md_index_t md_index              = ucp_ep_md_index(ep, lane);
     uct_batch_iov_t uct_iov_list[req->send.batch.iov_count];
-    uct_batch_signal_attr_t uct_signal_attr;
+    uct_batch_completion_attr_t uct_completion_attr;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
@@ -371,9 +371,9 @@ ucp_proto_put_batch_offload_progress(uct_pending_req_t *self) {
                                                              spriv->super.rkey_index);
         }
 
-        uct_signal_attr.am_id  = UCP_AM_ID_PUT_BATCH_NOTIFY;
-        uct_signal_attr.buffer = req->send.batch.completion_message;
-        uct_signal_attr.length = req->send.batch.completion_message_length;
+        uct_completion_attr.am_id  = UCP_AM_ID_PUT_BATCH_NOTIFY;
+        uct_completion_attr.completion_message = req->send.batch.completion_message;
+        uct_completion_attr.completion_message_length = req->send.batch.completion_message_length;
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
@@ -381,7 +381,7 @@ ucp_proto_put_batch_offload_progress(uct_pending_req_t *self) {
     status = uct_ep_put_batch_zcopy(ucp_ep_get_lane(ep, lane),
                                     uct_iov_list,
                                     req->send.batch.iov_count,
-                                    &uct_signal_attr,
+                                    &uct_completion_attr,
                                     &req->send.state.uct_comp);
    if (status == UCS_ERR_NO_RESOURCE) {
         return status;
