@@ -95,7 +95,7 @@ AS_IF([test "x$with_ib" = "xyes"],
         AS_IF([test "x/usr" = "x$with_verbs"],
           [],
           [verbs_incl="-I$with_verbs/include"
-           verbs_libs="-L$with_verbs/lib$libsuff"])
+           verbs_libs="-L$with_verbs/lib$libsuff -Wl,-rpath,$with_verbs/lib$libsuff"])
         LDFLAGS="$verbs_libs $LDFLAGS"
         CFLAGS="$verbs_incl $CFLAGS"
         CPPFLAGS="$verbs_incl $CPPFLAGS"
