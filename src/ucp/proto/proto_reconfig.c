@@ -104,6 +104,39 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
         ucs_error("cannot find remote protocol for: %s",
                   ucs_string_buffer_cstr(&strb));
 
+        /* TEMPORARY DEBUG (do not merge): the message above reports the ep
+         * config index saved when the request was submitted, which is not
+         * necessarily the current one. Dump both, the wireup state, and the
+         * protocol matrix of the *current* config, to tell apart a request
+         * stranded by a config change from a config that genuinely has no
+         * matching protocol. */
+        {
+            UCS_STRING_BUFFER_ONSTACK(dbg, 256);
+
+            ucs_error("reconfig debug: ep %p cfg_index current=%d saved=%d "
+                      "ep_flags=0x%x remote_connected=%d p2p_lanes=0x%llx "
+                      "cm_lane=%d rkey_cfg_index=%d",
+                      ep, ep->cfg_index,
+                      req->send.proto_config->ep_cfg_index, ep->flags,
+                      !!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED),
+                      (unsigned long long)ucp_ep_config(ep)->p2p_lanes,
+                      ucp_ep_has_cm_lane(ep),
+                      req->send.proto_config->rkey_cfg_index);
+
+            ucp_ep_config_name(ep->worker, ep->cfg_index, &dbg);
+            ucs_error("reconfig debug: current ep config: %s",
+                      ucs_string_buffer_cstr(&dbg));
+
+            ucs_string_buffer_reset(&dbg);
+            ucp_proto_select_info(ep->worker, ep->cfg_index,
+                                  req->send.proto_config->rkey_cfg_index,
+                                  &ucp_ep_config(ep)->proto_select, 1, &dbg);
+            fprintf(stderr, "# reconfig debug: protocol matrix of cfg#%d\n",
+                    ep->cfg_index);
+            ucs_string_buffer_dump(&dbg, "# ", stderr);
+            fflush(stderr);
+        }
+
         /* No protocol can serve this op on the current lane set - fail
          * the EP so the user error callback fires. */
         if (!ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_NONE) &&
