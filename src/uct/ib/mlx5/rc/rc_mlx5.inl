@@ -513,7 +513,7 @@ uct_rc_mlx5_base_ep_sgl_zcopy_post(uct_rc_mlx5_base_ep_t *ep,
                                    uint8_t opcode, uint8_t fence_flag,
                                    int resolve_atomic_rkey,
                                    uct_rc_send_handler_t handler,
-                                   uct_completion_t *comp)
+                                   uint16_t op_flags, uct_completion_t *comp)
 {
     uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
     size_t total                   = 0;
@@ -582,9 +582,10 @@ uct_rc_mlx5_base_ep_sgl_zcopy_post(uct_rc_mlx5_base_ep_t *ep,
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
     uct_rc_mlx5_txwq_add_psn(txwq, IBV_QPT_RC, num_packets);
 
-    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp,
-                              txwq->sig_pi, UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
-                              NULL, 0, total);
+    uct_rc_txqp_add_send_comp_sgl(&iface->super, &ep->super.txqp, handler, comp,
+                                  txwq->sig_pi,
+                                  UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY | op_flags,
+                                  buffers, lengths, count, total);
     return total;
 }
 

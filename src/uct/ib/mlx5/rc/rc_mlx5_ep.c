@@ -263,7 +263,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     total      = uct_rc_mlx5_base_ep_sgl_zcopy_post(
             ep, buffers, lengths, memhs, remote_addrs, rkeys, count,
             MLX5_OPCODE_RDMA_WRITE, fence_flag, fence,
-            uct_rc_ep_send_op_completion_handler, comp);
+            uct_rc_ep_send_op_completion_handler, 0, comp);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, ZCOPY, total);
     uct_rc_ep_enable_flush_remote(&ep->super);
@@ -360,7 +360,8 @@ uct_rc_mlx5_base_ep_get_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     total      = uct_rc_mlx5_base_ep_sgl_zcopy_post(
             ep, buffers, lengths, memhs, remote_addrs, rkeys, count,
             MLX5_OPCODE_RDMA_READ, fence_flag, 0,
-            uct_rc_ep_get_zcopy_completion_handler, comp);
+            uct_rc_ep_get_zcopy_completion_handler,
+            UCT_RC_IFACE_SEND_OP_FLAG_IOV, comp);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY, total);
     UCT_RC_RDMA_READ_POSTED(&iface->super, total);
