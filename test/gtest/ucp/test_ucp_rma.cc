@@ -1423,6 +1423,26 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
     }
 }
 
+/*
+ * The sporadic "cannot find remote protocol" failure is hit by the first
+ * operation on a freshly wired-up endpoint, so re-create the endpoints on
+ * every iteration instead of reusing a connected one.
+ */
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_wireup_stress,
+                     RUNNING_ON_VALGRIND) {
+    static const unsigned num_iters = 100;
+    for (unsigned i = 0; i < num_iters; ++i) {
+        cleanup();
+        modify_config("MAX_RMA_RAILS", "2");
+        test_ucp_rma::init();
+        test_put_sgl(4, UCS_KBYTE);
+        if (HasFailure() || (num_errors() > 0)) {
+            UCS_TEST_MESSAGE << "failed on iteration " << i;
+            break;
+        }
+    }
+}
+
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_fragmented_elements,
                      RUNNING_ON_VALGRIND) {
     cleanup();
