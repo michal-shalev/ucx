@@ -48,6 +48,10 @@ typedef struct {
      * Invalidated when any device's class changes. */
     unsigned                class_ordinal;
 
+    /* Cached PCIe bandwidth of the device (see
+     * ucs_topo_sys_device_get_pci_bw), or 0 if not yet computed. */
+    double                  pci_bw;
+
     /* Secondary device for the current device */
     ucs_sys_device_t        sys_dev_aux;
 

@@ -105,7 +105,7 @@ ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
     double multi_path_ratio       = context->config.ext.multi_path_ratio;
     ucp_rsc_index_t dev_index     = ucp_proto_common_get_dev_index(params, lane);
     uint8_t path_index            = selection->dev_count[dev_index];
-    double ratio;
+    double ratio, avail_bw;
 
     if (UCS_CONFIG_DBL_IS_AUTO(multi_path_ratio)) {
         ratio = ucs_min(1.0 - (lane_perf->path_ratio * path_index),
@@ -126,7 +126,16 @@ ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
               " " UCP_PROTO_LANE_FMT, ratio, path_index,
               UCP_PROTO_BW_ARG(lane_perf->bandwidth * ratio),
               UCP_PROTO_LANE_ARG(params, lane, lane_perf));
-    return lane_perf->bandwidth * ratio;
+    avail_bw = lane_perf->bandwidth * ratio;
+    if ((path_index == 0) && (selection->num_lanes > 0)) {
+        /* A lane on an additional device cannot add more bandwidth than what
+         * is left of the limit shared by all lanes (e.g. the PCIe bandwidth of
+         * the GPU). Additional paths of an already selected device are served
+         * from the bandwidth that device already consumed. */
+        avail_bw = ucs_min(avail_bw, selection->bw_left);
+    }
+
+    return avail_bw;
 }
 
 static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
@@ -255,7 +264,7 @@ out:
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_select_add_lane(ucp_proto_lane_selection_t *selection,
                           const ucp_proto_init_params_t *params,
-                          ucp_lane_index_t lane)
+                          ucp_lane_index_t lane, double lane_bw)
 {
     ucp_rsc_index_t dev_index = ucp_proto_common_get_dev_index(params, lane);
 
@@ -264,25 +273,32 @@ ucp_proto_select_add_lane(ucp_proto_lane_selection_t *selection,
                 UCP_PROTO_MAX_LANES);
     selection->lanes[selection->num_lanes++] = lane;
     selection->lane_map                     |= UCS_BIT(lane);
-    selection->dev_count[dev_index]++;
+    if (selection->dev_count[dev_index]++ == 0) {
+        /* The first lane of a device consumes its bandwidth from the limit
+         * shared by all lanes */
+        selection->bw_left -= ucs_min(lane_bw, selection->bw_left);
+    }
 }
 
 static void ucp_proto_multi_select_bw_lanes(
         const ucp_proto_init_params_t *params, const ucp_lane_index_t *lanes,
         ucp_lane_index_t num_lanes, ucp_lane_index_t max_lanes,
         const ucp_proto_common_tl_perf_t *lanes_perf, int fixed_first_lane,
-        unsigned owner_sys_dev_ord, ucp_proto_lane_selection_t *selection)
+        unsigned owner_sys_dev_ord, double bw_limit,
+        ucp_proto_lane_selection_t *selection)
 {
     ucp_lane_index_t i, lane_index;
     ucp_lane_map_t index_map;
 
     memset(selection, 0, sizeof(*selection));
+    selection->bw_left = bw_limit;
 
     /* Select all available indexes */
     index_map = UCS_MASK(num_lanes);
 
     if (fixed_first_lane) {
-        ucp_proto_select_add_lane(selection, params, lanes[0]);
+        ucp_proto_select_add_lane(selection, params, lanes[0],
+                                  lanes_perf[lanes[0]].bandwidth);
         index_map &= ~UCS_BIT(0);
     }
 
@@ -297,7 +313,8 @@ static void ucp_proto_multi_select_bw_lanes(
             break;
         }
 
-        ucp_proto_select_add_lane(selection, params, lanes[lane_index]);
+        ucp_proto_select_add_lane(selection, params, lanes[lane_index],
+                                  lanes_perf[lanes[lane_index]].bandwidth);
         index_map &= ~UCS_BIT(lane_index);
     }
 
@@ -673,6 +690,92 @@ ucp_proto_multi_filter_slow_lanes(const ucp_proto_multi_init_params_t *params,
     return num_fast_lanes;
 }
 
+/*
+ * Bandwidth which is shared by all the lanes of the protocol and cannot be
+ * exceeded no matter how many network devices are used: the PCIe bandwidth of
+ * the GPU which owns the buffer. Network devices are modeled independently of
+ * each other, so without this limit UCX assumes that every additional device
+ * adds its own bandwidth, even though all of them read/write the same GPU
+ * memory over the same GPU link.
+ *
+ * Returns UCS_INFINITY if there is no known limit (not a GPU buffer, unknown
+ * device, or PCIe link parameters are not available).
+ */
+static double
+ucp_proto_multi_get_shared_bw_limit(const ucp_proto_multi_init_params_t *params,
+                                    ucs_sys_device_t owner_sys_dev)
+{
+    ucp_context_h context = params->super.super.worker->context;
+
+    if (!context->config.ext.multi_lane_gpu_pcie_limit ||
+        !UCP_MEM_IS_GPU(ucp_proto_multi_get_owner_mem_type(params))) {
+        return UCS_INFINITY;
+    }
+
+    return ucs_topo_sys_device_get_pci_bw(owner_sys_dev);
+}
+
+/*
+ * Scale down the bandwidth of the lanes on additional devices, so that the
+ * total bandwidth of the selected lanes does not exceed the shared limit. Every
+ * device gets its full bandwidth, as long as there is some left of the limit,
+ * and the first lane is never scaled. Paths of the same device share the scale
+ * of the device. The weights of the lanes and the aggregate bandwidth are
+ * derived from the scaled values, so the traffic is split in proportion to the
+ * bandwidth each device can actually contribute.
+ */
+static void
+ucp_proto_multi_apply_shared_bw_limit(const ucp_proto_multi_init_params_t *params,
+                                      const ucp_proto_lane_selection_t *selection,
+                                      ucp_proto_common_tl_perf_t *lanes_perf,
+                                      double bw_limit)
+{
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    ucp_rsc_index_t dev_indexes[UCP_PROTO_MAX_LANES];
+    double scales[UCP_PROTO_MAX_LANES];
+    double bw_left = bw_limit;
+    ucp_lane_index_t i, j, lane;
+    double lane_bw, alloc_bw;
+
+    if (bw_limit == UCS_INFINITY) {
+        return;
+    }
+
+    for (i = 0; i < selection->num_lanes; ++i) {
+        lane           = selection->lanes[i];
+        dev_indexes[i] = ucp_proto_common_get_dev_index(init_params, lane);
+
+        for (j = 0; (j < i) && (dev_indexes[j] != dev_indexes[i]); ++j) {
+        }
+
+        if (j < i) {
+            scales[i] = scales[j];
+            continue;
+        }
+
+        lane_bw   = lanes_perf[lane].bandwidth;
+        alloc_bw  = ucs_min(lane_bw, bw_left);
+        bw_left  -= alloc_bw;
+        scales[i] = (i == 0) ? 1.0 : (alloc_bw / lane_bw);
+    }
+
+    for (i = 0; i < selection->num_lanes; ++i) {
+        lane = selection->lanes[i];
+        if (scales[i] >= 1.0) {
+            continue;
+        }
+
+        lanes_perf[lane].bandwidth *= scales[i];
+        ucs_trace("shared bw limit " UCP_PROTO_BW_FMT(limit) " scaled by %.3f"
+                  " " UCP_PROTO_LANE_FMT, UCP_PROTO_BW_ARG(bw_limit),
+                  scales[i], UCP_PROTO_LANE_ARG(init_params, lane,
+                                                &lanes_perf[lane]));
+        ucp_proto_perf_node_add_bandwidth(lanes_perf[lane].node,
+                                          "shared-limit-bw",
+                                          lanes_perf[lane].bandwidth);
+    }
+}
+
 /* Select the lanes to use from the filtered candidates. */
 static void
 ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
@@ -680,6 +783,7 @@ ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
                              ucp_lane_index_t num_lanes,
                              const ucp_proto_common_tl_perf_t *lanes_perf,
                              int fixed_first_lane, unsigned owner_sys_dev_ord,
+                             double bw_limit,
                              ucp_proto_lane_selection_t *selection)
 {
     ucs_log_indent(1);
@@ -687,7 +791,7 @@ ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
     ucp_proto_multi_select_bw_lanes(&params->super.super, lanes, num_lanes,
                                     params->max_lanes, lanes_perf,
                                     fixed_first_lane, owner_sys_dev_ord,
-                                    selection);
+                                    bw_limit, selection);
 
     ucs_assertv(ucs_ilog2(selection->lane_map) < UCP_MAX_LANES,
                 "lane_map exceeds max number of lanes: lane_map=0x%" PRIx64,
@@ -951,7 +1055,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_proto_common_tl_perf_t perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     ucp_proto_lane_selection_t selection;
-    double max_bandwidth, max_frag_ratio, min_bandwidth;
+    double max_bandwidth, max_frag_ratio, min_bandwidth, bw_limit;
     ucp_lane_index_t num_lanes;
     ucp_md_map_t reg_md_map;
     ucs_status_t status;
@@ -1007,9 +1111,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
 
     /* Select the lanes to use, and calculate their aggregate performance */
+    bw_limit = ucp_proto_multi_get_shared_bw_limit(params, owner_sys_dev);
     ucp_proto_multi_select_lanes(params, lanes, num_lanes, lanes_perf,
-                                 fixed_first_lane, owner_sys_dev_ord,
+                                 fixed_first_lane, owner_sys_dev_ord, bw_limit,
                                  &selection);
+    ucp_proto_multi_apply_shared_bw_limit(params, &selection, lanes_perf,
+                                          bw_limit);
     ucp_proto_multi_aggregate_perf(params, &selection, lanes_perf, &perf,
                                    &max_frag_ratio, &min_bandwidth);
 

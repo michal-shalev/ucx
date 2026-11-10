@@ -519,6 +519,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         device->device_class  = UCS_TOPO_DEVICE_CLASS_UNKNOWN;
         device->flags         = 0;
         device->class_ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
+        device->pci_bw        = 0;
         device->sibling_role  = UCS_TOPO_SIBLING_ROLE_NONE;
         device->sys_dev_aux   = UCS_SYS_DEVICE_ID_UNKNOWN;
         UCS_STATIC_BITMAP_RESET_ALL(&device->siblings);
@@ -1731,11 +1732,11 @@ static const ucs_topo_pci_info_t ucs_topo_pci_info[] = {
      .decoding      = 130},
 };
 
-double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
+static double ucs_topo_calc_pci_bw(const char *dev_name,
+                                   const char *sysfs_path,
+                                   const char *pci_width_file_name,
+                                   const char *pci_speed_file_name)
 {
-    const char *pci_width_file_name = "current_link_width";
-    const char *pci_speed_file_name = "current_link_speed";
-
     double bw_gbps, effective_bw, link_utilization;
     const ucs_topo_pci_info_t *p;
     char pci_width_str[16];
@@ -1759,7 +1760,7 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
         goto out_max_bw;
     }
 
-    if (sscanf(pci_width_str, "%u", &width) < 1) {
+    if ((sscanf(pci_width_str, "%u", &width) < 1) || (width == 0)) {
         ucs_debug("%s: incorrect format of %s file: expected: <unsigned "
                   "integer>, actual: %s\n",
                   dev_name, pci_width_file_name, pci_width_str);
@@ -1795,6 +1796,63 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
 out_max_bw:
     ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);
     return UCS_INFINITY;
+}
+
+double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
+{
+    return ucs_topo_calc_pci_bw(dev_name, sysfs_path, "current_link_width",
+                                "current_link_speed");
+}
+
+double ucs_topo_sys_device_get_pci_bw(ucs_sys_device_t sys_dev)
+{
+    ucs_status_t status;
+    const char *name;
+    double pci_bw;
+    char *path;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_INFINITY;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+        return UCS_INFINITY;
+    }
+
+    pci_bw = ucs_topo_global_ctx.devices[sys_dev].pci_bw;
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    if (pci_bw != 0) {
+        return pci_bw;
+    }
+
+    status = ucs_string_alloc_path_buffer(&path, "pci_bw_path");
+    if (status != UCS_OK) {
+        return UCS_INFINITY;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    status = ucs_topo_sys_dev_to_sysfs_path(sys_dev, path, PATH_MAX);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    if (status == UCS_OK) {
+        /* Use the maximal link parameters and not the current ones, since the
+         * link of an idle device (e.g. a GPU) can be trained down to a lower
+         * speed, which would wrongly limit the bandwidth. */
+        name   = ucs_topo_sys_device_get_name(sys_dev);
+        pci_bw = ucs_topo_calc_pci_bw(name, path, "max_link_width",
+                                      "max_link_speed");
+    } else {
+        pci_bw = UCS_INFINITY;
+    }
+
+    ucs_free(path);
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    ucs_topo_global_ctx.devices[sys_dev].pci_bw = pci_bw;
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return pci_bw;
 }
 
 const char *ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer)

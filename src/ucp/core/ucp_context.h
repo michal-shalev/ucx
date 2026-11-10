@@ -265,6 +265,9 @@ typedef struct ucp_context_config {
     ucp_gpu_nic_assignment_mode_t          gpu_nic_assignment_mode;
     /** Restrict lanes to one network device per protocol */
     int                                    proto_use_single_net_device;
+    /** Limit the aggregate bandwidth of multi-lane protocols to the PCIe
+     *  bandwidth of the GPU which owns the buffer */
+    int                                    multi_lane_gpu_pcie_limit;
     /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
     unsigned long                          max_hca_per_gpu;
     /** Local identifier on a single node or UCS_ULUNITS_AUTO */

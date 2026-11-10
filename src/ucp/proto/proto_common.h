@@ -190,6 +190,9 @@ typedef struct {
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     ucp_lane_index_t num_lanes;
     uint8_t          dev_count[UCP_MAX_RESOURCES];
+    /* Bandwidth left of the limit shared by all the lanes (e.g. the PCIe
+     * bandwidth of the GPU), or infinity if there is no such limit */
+    double           bw_left;
 } ucp_proto_lane_selection_t;
 
 

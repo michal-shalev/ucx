@@ -703,6 +703,15 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"MULTI_LANE_GPU_PCIE_LIMIT", "y",
+   "Limit the aggregate bandwidth of multi-lane protocols which access GPU\n"
+   "memory to the PCIe bandwidth of the GPU, which is shared by all the lanes.\n"
+   "Lanes on additional network devices are assigned only the bandwidth which\n"
+   "is left after the first lane (and are not used if none is left), instead\n"
+   "of being assumed to add their full bandwidth.",
+   ucs_offsetof(ucp_context_config_t, multi_lane_gpu_pcie_limit),
+   UCS_CONFIG_TYPE_BOOL},
+
   {"MAX_HCA_PER_GPU", "inf",
    "Maximum number of HCAs to register GPU memory on.\n"
    " - inf  : register on all HCAs (default).\n"
