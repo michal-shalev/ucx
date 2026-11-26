@@ -11,7 +11,6 @@
 #endif
 
 
-#include <ucs/algorithm/crc.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
@@ -141,30 +140,6 @@ const char *ucs_get_exe()
     }
 
     return exe;
-}
-
-uint32_t ucs_file_checksum(const char *filename)
-{
-    char buffer[1024];
-    ssize_t nread;
-    int fd;
-    uint32_t crc;
-
-    fd = open(filename, O_RDONLY);
-    if (fd < 0) {
-        return 0;
-    }
-
-    crc = 0;
-    do {
-        nread = read(fd, buffer, sizeof(buffer));
-        if (nread > 0) {
-            crc = ucs_crc32(crc, buffer, nread);
-        }
-    } while (nread == sizeof(buffer));
-    close(fd);
-
-    return crc;
 }
 
 ucs_status_t

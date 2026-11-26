@@ -171,7 +171,6 @@ void ucs_log_fatal_error(const char *format, ...) UCS_F_PRINTF(1, 2);
  */
 void ucs_log_early_init(void);
 void ucs_log_init(void);
-void ucs_component_log_init(void);
 void ucs_log_cleanup(void);
 
 

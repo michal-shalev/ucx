@@ -132,22 +132,6 @@ static inline double ucs_time_to_nsec(ucs_time_t t)
     return ucs_time_to_sec(t) * UCS_NSEC_PER_SEC;
 }
 
-/**
- * Convert UCS time interval (small) to nanoseconds.
- */
-static inline double ucs_time_interval_to_nsec(ucs_time_t t)
-{
-    return ucs_time_to_sec(t * UCS_NSEC_PER_SEC);
-}
-
-/* Convert seconds to POSIX timeval */
-static inline void ucs_sec_to_timeval(double seconds, struct timeval *tv)
-{
-    int64_t usec = (int64_t)( (seconds * UCS_USEC_PER_SEC) + 0.5 );
-    tv->tv_sec  = usec / UCS_USEC_PER_SEC;
-    tv->tv_usec = usec % UCS_USEC_PER_SEC;
-}
-
 /* Convert seconds to POSIX timespec */
 static inline void ucs_sec_to_timespec(double seconds, struct timespec *ts)
 {

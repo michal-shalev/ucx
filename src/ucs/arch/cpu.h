@@ -103,7 +103,6 @@ typedef struct ucs_cpu_builtin_memcpy {
 
 
 /* System constants */
-#define UCS_SYS_POINTER_SIZE       (sizeof(void*))
 #define UCS_SYS_PARAGRAPH_SIZE     16
 #define UCS_SYS_PCI_MAX_PAYLOAD    512
 

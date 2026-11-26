@@ -18,10 +18,6 @@
 #include <ucs/debug/log.h>
 
 
-/* Initial allocation size */
-#define UCS_PTR_ARRAY_INITIAL_SIZE  8
-
-
 static UCS_F_ALWAYS_INLINE int
 ucs_ptr_array_is_free(ucs_ptr_array_t *ptr_array, unsigned element_index)
 {

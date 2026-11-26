@@ -191,12 +191,6 @@ const char *ucs_get_exe();
 
 
 /**
- * Calculate checksum of a file.
- */
-uint32_t ucs_file_checksum(const char *filename);
-
-
-/**
  * Get interface index for a given interface name.
  */
 ucs_status_t

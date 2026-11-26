@@ -20,7 +20,6 @@
 
 
 #define UCS_ASYNC_EPOLL_MAX_EVENTS      16
-#define UCS_ASYNC_EPOLL_MIN_TIMEOUT_MS  2.0
 
 
 typedef struct ucs_async_thread {

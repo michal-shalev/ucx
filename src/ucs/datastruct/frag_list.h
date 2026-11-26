@@ -57,7 +57,6 @@ typedef enum {
 /* Sequence number type */
 /* NOTE: it must be same type as UD transport psn */
 typedef uint16_t   ucs_frag_list_sn_t;
-#define UCS_FRAG_LIST_SN_CMP UCS_CIRCULAR_COMPARE16
 
 /**
  * C standard specifies that short integer is promoted to int
@@ -67,8 +66,8 @@ typedef uint16_t   ucs_frag_list_sn_t;
  *
  * So we must always use compare macro
  */
+#define UCS_FRAG_LIST_SN_CMP UCS_CIRCULAR_COMPARE16
 
-#define UCS_FRAG_LIST_NEXT_SN(sn) ((ucs_frag_list_sn_t)((sn)+1))
 /* part of skb */
 typedef struct ucs_frag_list_head {
     ucs_queue_head_t       list;
@@ -154,21 +153,6 @@ void ucs_frag_list_dump(ucs_frag_list_t *head, int how);
 static inline ucs_frag_list_sn_t ucs_frag_list_sn(ucs_frag_list_t *head)
 {
     return head->head_sn;
-}
-
-static inline void ucs_frag_list_sn_inc(ucs_frag_list_t *head)
-{
-    head->head_sn++;
-}
-
-static inline unsigned ucs_frag_list_count(ucs_frag_list_t *head)
-{
-    return head->elem_count;
-}
-
-static inline int ucs_frag_list_empty(ucs_frag_list_t *head)
-{
-    return ucs_queue_is_empty(&head->list) && ucs_queue_is_empty(&head->ready_list);
 }
 
 static inline ucs_frag_list_ooo_type_t
